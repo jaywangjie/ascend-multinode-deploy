@@ -1,0 +1,5 @@
+hosts.env
+forensics_*/
+__pycache__/
+*.pyc
+*.log
