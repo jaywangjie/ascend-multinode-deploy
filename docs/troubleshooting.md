@@ -86,6 +86,19 @@
 - `/etc/hixlep` 是运行时临时目录，空的/有瞬态文件都正常，别被它带偏；
   真正要一致的是 `/etc/hccl_rootinfo.json` 与 `/etc/cloud/topo/950`。
 
+## 案例 9：跨机通信初始化卡住（hcclCommInit 不返回/超时）
+
+- **表象**：torchrun/allreduce 冒烟卡在 init_process_group 或 hcclCommInit，最后超时。
+- **常见根因**：
+  1. **多网卡选错**：机器有管理网/存储网/RDMA 网多块网卡，HCCL 选了不通的网卡 →
+     `hosts.env` 填 `HCCL_IFNAME=<RDMA网卡名>`（launch 自动注入
+     `HCCL_SOCKET_IFNAME`）；单机冒烟时也可临时
+     `export HCCL_SOCKET_IFNAME=xxx` 验证。
+  2. 通信平面不一致（转案例 2 的根因 3，先跑 cluster_diff.sh）。
+  3. 端口未放通：MASTER_PORT（默认 6000）跨机需可达，换端口或放通安全组。
+- **定位顺序**：先单机 8 卡 allreduce（排除设备问题）→ 两机 allreduce（卡 init =
+  组网问题）→ cluster_diff.sh 对平面。
+
 ## 其他已知坑（单机时代遗留，多机同样适用）
 
 - `examples/*/install_depends.sh` 可能是别的模型线脚本：切框架 commit、连环降级

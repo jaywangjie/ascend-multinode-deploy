@@ -12,10 +12,13 @@ SSH_CONFIG="$HOME/.ssh/config"
 BEGIN_MARK="# >>> ascend-multinode-deploy >>>"
 END_MARK="# <<< ascend-multinode-deploy <<<"
 
-# 1) 幂等：去掉旧块再追加
+# 1) 幂等：去掉旧块，重新生成后【插到文件头部】
+#    ssh 配置是"首个匹配生效"——若用户已有同名 Host 条目，追加到末尾会被遮蔽，
+#    因此必须前置，并在下方检测冲突时告警
 touch "$SSH_CONFIG"
 sed -i "/^$BEGIN_MARK$/,/^$END_MARK$/d" "$SSH_CONFIG"
 
+BLOCK_FILE=$(mktemp)
 {
   echo "$BEGIN_MARK"
   if [ -n "$JUMP_HOST" ] && [ -n "$JUMP_IP" ]; then
@@ -51,8 +54,19 @@ EOF
 EOF
   done
   echo "$END_MARK"
-} >> "$SSH_CONFIG"
-echo "[1/3] ssh config 已写入（节点别名: ${NODES[*]%%:*}）"
+} > "$BLOCK_FILE"
+
+# 同名 Host 冲突检测（我们前置生效，但要提醒用户旧条目已失效）
+for n in "${NODES[@]}"; do
+  name="${n%%:*}"
+  if grep -qE "^Host .*\b$name\b" "$SSH_CONFIG" 2>/dev/null; then
+    echo "注意: ~/.ssh/config 中已存在 Host $name 的旧条目，本 skill 的配置将优先生效" >&2
+  fi
+done
+
+cat "$BLOCK_FILE" "$SSH_CONFIG" > "${SSH_CONFIG}.new" && mv "${SSH_CONFIG}.new" "$SSH_CONFIG"
+rm -f "$BLOCK_FILE"
+echo "[1/3] ssh config 已写入并置于文件头部（节点别名: ${NODES[*]%%:*}）"
 
 # 2) 本机密钥
 if [ ! -f "$HOME/.ssh/id_ed25519.pub" ]; then

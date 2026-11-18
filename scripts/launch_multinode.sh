@@ -29,23 +29,37 @@ do_ssh_exec() { # do_ssh_exec <别名> <容器内命令>
 case "$CMD" in
 start)
   [ -n "${EXTRA_ENV:-}" ] && EXTRA_EXPORT="export $EXTRA_ENV && " || EXTRA_EXPORT=""
+  # 多网卡机器注入 HCCL 网卡选择（见 troubleshooting 案例9）
+  IF_EXPORT=""
+  [ -n "${HCCL_IFNAME:-}" ] && IF_EXPORT="export HCCL_SOCKET_IFNAME=$HCCL_IFNAME && "
+  # LAUNCH_MODE: vc   = MindSpeed-MM 惯例（脚本内 NNODES=${VC_WORKER_NUM:-1} ...）
+  #              plain= 通用 torchrun/Megatron/DeepSpeed（直接注入 MASTER_ADDR/NNODES/NODE_RANK）
+  case "${LAUNCH_MODE:-vc}" in
+    vc|plain) : ;;
+    *) echo "错误: LAUNCH_MODE 只能是 vc 或 plain（hosts.env）" >&2; exit 1 ;;
+  esac
   i=0
   for n in "${NODES[@]}"; do
     name="${n%%:*}"
-    inner="cd $MM_DIR && ${EXTRA_EXPORT}export VC_WORKER_HOSTS=\"$IPS\" VC_WORKER_NUM=$N VC_TASK_INDEX=$i MASTER_PORT=$MASTER_PORT && bash $RUN_SCRIPT >> /tmp/launch_${name}.log 2>&1"
+    if [ "${LAUNCH_MODE:-vc}" = plain ]; then
+      DIST_EXPORT="export MASTER_ADDR=$(node_ip 0) NNODES=$N NODE_RANK=$i MASTER_PORT=$MASTER_PORT"
+    else
+      DIST_EXPORT="export VC_WORKER_HOSTS=\"$IPS\" VC_WORKER_NUM=$N VC_TASK_INDEX=$i MASTER_PORT=$MASTER_PORT"
+    fi
+    inner="cd $MM_DIR && ${EXTRA_EXPORT}${IF_EXPORT}$DIST_EXPORT && bash $RUN_SCRIPT >> /tmp/launch_${name}.log 2>&1"
     echo "启动 $name (NODE_RANK=$i)..."
     do_ssh_exec "$name" "$inner" || echo "  $name 启动命令下发失败" >&2
     [ "$i" = 0 ] && echo "  主节点已先起，等 15s 再起从节点" && sleep 15
     i=$((i+1))
   done
-  echo "全部节点已下发。验证: ./launch_multinode.sh status"
+  echo "全部节点已下发（LAUNCH_MODE=${LAUNCH_MODE:-vc}）。验证: ./launch_multinode.sh status"
   echo "若 3 分钟内日志无 'iteration' 行，看 docs/troubleshooting.md 案例2/3"
   ;;
 status)
   for n in "${NODES[@]}"; do
     name="${n%%:*}"
     echo "== $name =="
-    sshn "$name" "docker exec $CONTAINER_NAME bash -c 'pgrep -fc trainer.py; ls -t $MM_DIR/logs/*.log 2>/dev/null | head -1'" 2>/dev/null \
+    sshn "$name" "docker exec $CONTAINER_NAME bash -c 'pgrep -fc trainer.py; ls -t ${LOG_DIR:-$MM_DIR/logs}/*.log 2>/dev/null | head -1'" 2>/dev/null \
       || echo "  不可达/容器未运行"
   done
   ;;
@@ -54,7 +68,7 @@ log)
   for n in "${NODES[@]}"; do
     name="${n%%:*}"
     echo "== $name =="
-    sshn "$name" "docker exec $CONTAINER_NAME bash -c 'ls -t $MM_DIR/logs/*.log 2>/dev/null | head -1 | xargs -r tail -$TAIL'" 2>/dev/null
+    sshn "$name" "docker exec $CONTAINER_NAME bash -c 'ls -t ${LOG_DIR:-$MM_DIR/logs}/*.log 2>/dev/null | head -1 | xargs -r tail -$TAIL'" 2>/dev/null
   done
   ;;
 stop)

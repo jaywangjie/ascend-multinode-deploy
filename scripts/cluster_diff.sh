@@ -61,6 +61,10 @@ for field in DRV ROOTINFO_MD5 NET_INSTANCE_ID TOPO_FILE_PATH TOPO950_MD5 CONTAIN
 done
 
 echo "----"
+# 物理机（PLATFORM=bare）无 /etc/hccl_rootinfo.json —— 相关字段全空属正常
+if ! grep -q "^ROOTINFO_MD5=." "$WORK/${FIRST}.txt" && [ "${PLATFORM:-a5-cloud}" != "a5-cloud" ]; then
+  echo "本机无 hccl_rootinfo.json 且 PLATFORM=bare：云组网字段跳过（属正常）"
+fi
 echo "重点核对: NET_INSTANCE_ID / TOPO_FILE_PATH 必须完全相同（同一通信平面）"
 BAD=0
 for field in DRV ROOTINFO_MD5 NET_INSTANCE_ID CONTAINER_NORM; do

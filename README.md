@@ -45,6 +45,18 @@ cp hosts.env.example hosts.env && vim hosts.env   # 填机器/镜像/路径
 ./scripts/launch_multinode.sh start
 ```
 
+## 通用性边界
+
+| 部件 | 通用 | 说明 |
+|---|---|---|
+| setup_ssh / mount_sfs / npu_mem_monitor / find_first_dead_rank | 任意 SSH 集群 | 与 NPU 型号无关 |
+| host_check / cluster_diff / smoke_allreduce | 昇腾全系 | npu-smi/HCCL 有则可用 |
+| run_container | `PLATFORM` 开关 | a5-cloud（默认，云上 950DT）/ bare（物理机 950/910B） |
+| launch_multinode | `LAUNCH_MODE` 开关 | vc（MindSpeed-MM）/ plain（任意 torchrun 系框架） |
+| docs/deployment.md 权重转换节 | MindSpeed-MM | 其他框架按其文档做数据/权重准备 |
+
+不覆盖的形态：K8s/rank-table 启动方式、非华为云对象存储、非 docker 运行时。
+
 ## License
 
 MIT

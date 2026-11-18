@@ -37,24 +37,30 @@ gen_devices() {
   for d in /dev/ummu /dev/uburma; do [ -e "$d" ] && echo "--device $d:$d"; done
 }
 gen_vol() {
-  # RDMA/urma 用户态库（存在才挂）
-  for f in /usr/lib64/urma /usr/lib64/liburma.so.0.0.3 /usr/lib64/liburma.so.0 \
-           /usr/lib64/liburma_common.so.0.0.1 /usr/lib64/liburma_common.so.0 \
-           /usr/lib64/libummu.so.1.0.1 /usr/lib64/libummu.so.1 /usr/lib64/libummu.so \
-           /usr/lib64/libnl-3.so.200 /usr/lib64/libnl-3.so.200.26.0 \
-           /usr/lib64/libnl-genl-3.so.200 /usr/lib64/libnl-genl-3.so.200.26.0 \
-           /usr/lib64/libibverbs.so.1.14.50.0 /usr/lib64/libibverbs.so.1 \
-           /usr/lib64/libhrn5-rdmav34.so /usr/lib64/libibv_extend.so.4.2.0 \
-           /usr/lib64/libibverbs /etc/libibverbs.d /usr/bin/urma_admin /var/log/hinic; do
-    [ -e "$f" ] && echo "-v $f:$f"
-  done
-  # 核心：驱动/工具/HCCL 组网三件套/共享存储
+  # PLATFORM=a5-cloud: 云上 950DT —— 含 urma RDMA 栈与 HCCL 云组网三件套
+  # PLATFORM=bare:     物理机/非云（950/910B 通用）—— 只挂通用 RDMA 库，跳过云组网
+  RDMA_LIBS="/usr/lib64/libnl-3.so.200 /usr/lib64/libnl-3.so.200.26.0 \
+             /usr/lib64/libnl-genl-3.so.200 /usr/lib64/libnl-genl-3.so.200.26.0 \
+             /usr/lib64/libibverbs.so.1.14.50.0 /usr/lib64/libibverbs.so.1 \
+             /usr/lib64/libibverbs /etc/libibverbs.d"
+  if [ "$PLATFORM" = "a5-cloud" ]; then
+    RDMA_LIBS="$RDMA_LIBS /usr/lib64/urma /usr/lib64/liburma.so.0.0.3 /usr/lib64/liburma.so.0 \
+               /usr/lib64/liburma_common.so.0.0.1 /usr/lib64/liburma_common.so.0 \
+               /usr/lib64/libummu.so.1.0.1 /usr/lib64/libummu.so.1 /usr/lib64/libummu.so \
+               /usr/lib64/libhrn5-rdmav34.so /usr/lib64/libibv_extend.so.4.2.0 \
+               /usr/bin/urma_admin /var/log/hinic"
+  fi
+  for f in $RDMA_LIBS; do [ -e "$f" ] && echo "-v $f:$f"; done
+  # 核心：驱动/工具/共享存储
   echo "-v /usr/local/dcmi:/usr/local/dcmi"
   echo "-v /usr/local/Ascend/driver:/usr/local/Ascend/driver"
   echo "-v /usr/local/sbin/npu-smi:/usr/local/bin/npu-smi"
-  echo "-v /etc/hccl_rootinfo.json:/etc/hccl_rootinfo.json"
-  echo "-v /etc/cloud/topo/950:/etc/cloud/topo/950"
-  echo "-v /etc/hixlep:/etc/hixlep"
+  if [ "$PLATFORM" = "a5-cloud" ]; then
+    # HCCL 云组网三件套（多机通信平面依据；物理机无此文件）
+    echo "-v /etc/hccl_rootinfo.json:/etc/hccl_rootinfo.json"
+    echo "-v /etc/cloud/topo/950:/etc/cloud/topo/950"
+    echo "-v /etc/hixlep:/etc/hixlep"
+  fi
   echo "-v /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime"
   echo "-v $SFS_MOUNT:$SFS_MOUNT"
 }
@@ -85,7 +91,7 @@ for n in "${NODES[@]}"; do
   name="${n%%:*}"
   [ -n "$ONLY" ] && [ "$name" != "$ONLY" ] && continue
   echo "== $name $([ "$DRY" = 1 ] && echo '(dry-run)') =="
-  sshn "$name" "CONTAINER_NAME='$CONTAINER_NAME' FORCE='$FORCE' DRY='$DRY' SFS_MOUNT='$SFS_MOUNT' SOC_VERSION='$SOC_VERSION' IMAGE='$IMAGE' EXTRA_MOUNTS='$EXTRA_MOUNTS' EXTRA_DEVICES='$EXTRA_DEVICES' bash -s" <<<"$(gen_remote)" \
+  sshn "$name" "CONTAINER_NAME='$CONTAINER_NAME' FORCE='$FORCE' DRY='$DRY' PLATFORM='$PLATFORM' SFS_MOUNT='$SFS_MOUNT' SOC_VERSION='$SOC_VERSION' IMAGE='$IMAGE' EXTRA_MOUNTS='$EXTRA_MOUNTS' EXTRA_DEVICES='$EXTRA_DEVICES' bash -s" <<<"$(gen_remote)" \
     || { echo "$name 创建失败" >&2; FAILED=1; }
 done
 exit $FAILED

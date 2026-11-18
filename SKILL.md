@@ -5,8 +5,19 @@ description: Deploy and operate multi-node Ascend NPU (950DT/A5) training cluste
 
 # Ascend 多机训练集群部署与运维
 
-适用 N 台 950DT/A5 + Docker + SFS Turbo 共享存储 + MindSpeed-MM（FSDP）。
+适用 N 台昇腾 NPU 机器 + Docker + 共享存储，默认面向 950DT/A5 云上环境。
 所有环境值集中在 `hosts.env`（从 `hosts.env.example` 复制），脚本从它读取。
+
+**跨环境适配开关**（都在 hosts.env）：
+
+- `PLATFORM=a5-cloud|bare` —— a5-cloud 挂 HCCL 云组网三件套 + urma RDMA 栈
+  （默认）；bare 用于物理机/非云（950/910B），只挂通用 RDMA 库、跳过云组网，
+  `SOC_VERSION` 相应改。
+- `LAUNCH_MODE=vc|plain` —— vc 注入 MindSpeed-MM 的 VC_WORKER_* 变量（默认）；
+  plain 直接注入 MASTER_ADDR/NNODES/NODE_RANK，适配任意 torchrun 系框架
+  （Megatron/DeepSpeed 等）。
+- `HCCL_IFNAME` —— 多网卡机器指定 HCCL 通信网卡。
+- `LOG_DIR` —— 非 MindSpeed-MM 框架的自定义日志目录。
 
 完整流程见 `docs/deployment.md`；崩了先读 `docs/troubleshooting.md`。
 

@@ -52,8 +52,10 @@ else
 fi
 if command -v chronyc >/dev/null && chronyc tracking 2>/dev/null | grep -q "Leap status     : Normal"; then
   say PASS "时钟同步" "chrony 正常"
+elif command -v timedatectl >/dev/null && [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+  say PASS "时钟同步" "systemd-timesyncd 正常"
 else
-  say WARN "时钟同步" "chrony 非正常 —— HCCL 对时钟偏差敏感"
+  say WARN "时钟同步" "chrony/timesyncd 均未确认 —— HCCL 对时钟偏差敏感"
 fi
 if pgrep -f "trainer.py|torchrun" >/dev/null; then
   say WARN "残留训练进程" "$(pgrep -af 'trainer.py|torchrun' | head -1)"

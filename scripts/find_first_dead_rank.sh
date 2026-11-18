@@ -33,7 +33,20 @@ for n in "${NODES[@]}"; do
       grep -aE 'Heartbeat Lost|Cluster Exception Location|Possible Reason|Discoverer' \"\$p\" | head -8
     done
     echo '#### dmesg 时间窗内错误 ####'
-    dmesg -T 2>/dev/null | awk -v t0=\"$T0\" -v t1=\"$T1\" '\$0>=t0 && \$0<=t1' | grep -iE 'error|oom|link|roce' | head -8
+    dmesg -T 2>/dev/null | T0='$T0' T1='$T1' python3 -c '
+import os,re,sys,datetime
+t0=datetime.datetime.strptime(os.environ["T0"],"%Y-%m-%d %H:%M")
+t1=datetime.datetime.strptime(os.environ["T1"],"%Y-%m-%d %H:%M")
+pat=re.compile(r\"\\[([\\w ]+\\d+ \\d\\d:\\d\\d:\\d\\d \\d{4})\\]\")
+for l in sys.stdin:
+    m=pat.match(l)
+    if not m: continue
+    try:
+        t=datetime.datetime.strptime(\" \".join(m.group(1).split()),\"%a %b %d %H:%M:%S %Y\")
+    except ValueError:
+        continue
+    if t0<=t<=t1: sys.stdout.write(l)
+' | grep -iE 'error|oom|link|roce' | head -8
   " >"$OUT/$name.txt" 2>&1 || echo "  $name 采集失败（ssh 不通?）" >>"$OUT/$name.txt"
 done
 
